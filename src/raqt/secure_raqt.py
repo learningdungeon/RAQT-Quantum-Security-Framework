@@ -6,6 +6,7 @@ Integrates the Remote Anonymous Quantum Transmission (RAQT) protocol with:
 - Post-Quantum Cryptography (Dilithium + ML-KEM)
 - AES-256-GCM encryption for classical channels
 - Tamper detection and monitoring
+- AI-based anomaly detection for eavesdropping (Sentinel-Integrated)
 
 Based on Christandl-Wehner 2004 anonymous quantum bit transmission protocol.
 """
@@ -33,6 +34,9 @@ from puf.arbiter_puf import ArbiterPUF
 from puf.fusion import PUFFusion, FusionMethod
 from puf.fuzzy_extractor import FuzzyExtractor
 from crypto.pqc import PQCAuthenticationProtocol, PQCKeyDerivation
+
+# Sentinel-Integrated AI Module
+from ai.raqt_anomaly_detector import RAQTAnomalyDetector
 
 
 class NodeState(Enum):
@@ -209,9 +213,9 @@ class SecureNode:
                 self.session_key = self.pqc_protocol.get_session_key()
                 
                 self.state = NodeState.AUTHENTICATED
-                self.metrics.successful_transmissions += 1
+                self.metrics.successful_transmissions = 1
             else:
-                self.metrics.failed_authentications += 1
+                self.metrics.failed_authentications = 1
                 
             self.metrics.authentication_time = time.time() - start_time
             
@@ -222,7 +226,7 @@ class SecureNode:
             }
             
         except Exception as e:
-            self.metrics.failed_authentications += 1
+            self.metrics.failed_authentications = 1
             return False, {'error': str(e)}
     
     def check_tamper(self) -> Tuple[bool, float]:
@@ -244,7 +248,7 @@ class SecureNode:
         
         if deviation > self.tamper_threshold:
             self.state = NodeState.COMPROMISED
-            self.metrics.tamper_events += 1
+            self.metrics.tamper_events = 1
             return True, deviation
         
         return False, deviation
@@ -319,10 +323,14 @@ class SecureNode:
 
 class SecureRAQTProtocol:
     """
-    Secure RAQT Protocol with PUF+PQC integration
+    Secure RAQT Protocol with PUF+PQC integration and AI anomaly detection.
     
-    Combines anonymous quantum transmission with hardware-rooted security
-    and post-quantum cryptographic protection.
+    Combines anonymous quantum transmission with hardware-rooted security,
+    post-quantum cryptographic protection, and AI-based eavesdropping detection.
+    
+    Sentinel Framework Alignment:
+        - BSQC Semester 5: Hardware Root of Trust
+        - BSQC Semester 7: Secure Quantum Networks (AI-Enhanced)
     """
     
     def __init__(self, num_nodes: int = 4, security_level: SecurityLevel = SecurityLevel.HIGH):
@@ -337,6 +345,10 @@ class SecureRAQTProtocol:
         self.security_level = security_level
         self.nodes: List[SecureNode] = []
         
+        # Sentinel-Integrated AI anomaly detector
+        self.ai_detector: Optional[RAQTAnomalyDetector] = None
+        self.ai_detector_trained = False
+        
         # Initialize nodes
         for i in range(num_nodes):
             node = SecureNode(
@@ -350,7 +362,7 @@ class SecureRAQTProtocol:
     
     def _mutual_authentication(self):
         """Perform mutual authentication between all nodes"""
-        print(f"\n🔐 Performing mutual authentication for {self.num_nodes} nodes...")
+        print(f"\n[SEC] Performing mutual authentication for {self.num_nodes} nodes...")
         
         for i, node in enumerate(self.nodes):
             # Get public keys from all other nodes
@@ -360,25 +372,49 @@ class SecureRAQTProtocol:
                     success, _ = node.authenticate(peer_keys)
                     
                     if not success:
-                        print(f"⚠️  Authentication failed: {node.node_id} <-> {peer.node_id}")
+                        print(f"[WARN] Authentication failed: {node.node_id} <-> {peer.node_id}")
         
-        print("✅ Mutual authentication complete")
+        print("[SEC] Mutual authentication complete")
+    
+    def train_ai_detector(self, normal_executions: List[Dict]) -> bool:
+        """
+        Train the AI anomaly detector on normal RAQT execution data.
+        
+        Args:
+            normal_executions: List of normal RAQT execution dictionaries
+            
+        Returns:
+            True if training successful
+        """
+        if self.ai_detector is None:
+            self.ai_detector = RAQTAnomalyDetector(contamination=0.1)
+        
+        try:
+            self.ai_detector.train(normal_executions)
+            self.ai_detector_trained = True
+            print("[AI] Anomaly detector trained successfully")
+            return True
+        except Exception as e:
+            print(f"[AI] Training failed: {e}")
+            return False
     
     def run_secure_transmission(
         self,
         sender_id: int,
         secret_bit: int,
         shots: int = 100,
-        enable_tamper_check: bool = True
+        enable_tamper_check: bool = True,
+        enable_ai_detection: bool = True
     ) -> Dict:
         """
-        Run secure RAQT transmission with full security stack
+        Run secure RAQT transmission with full security stack.
         
         Args:
             sender_id: Index of the sender node (0 to num_nodes-1)
             secret_bit: Secret bit to transmit (0 or 1)
             shots: Number of quantum protocol runs
             enable_tamper_check: Enable tamper detection monitoring
+            enable_ai_detection: Enable AI-based eavesdropping detection
             
         Returns:
             Dictionary with transmission results and security metrics
@@ -398,10 +434,11 @@ class SecureRAQTProtocol:
         
         # Update state
         sender.state = NodeState.TRANSMITTING
-        sender.metrics.total_transmissions += 1
+        sender.metrics.total_transmissions = 1
         
         # Run RAQT protocol (quantum transmission)
         success_count = 0
+        xor_results = []
         transmission_start = time.time()
         
         for _ in range(shots):
@@ -427,6 +464,8 @@ class SecureRAQTProtocol:
                 m, _ = qapi.measure(q)
                 xor_sum ^= m
             
+            xor_results.append(xor_sum)
+            
             # Check if parity matches secret bit
             if xor_sum == secret_bit:
                 success_count += 1
@@ -446,11 +485,12 @@ class SecureRAQTProtocol:
         
         # Update metrics
         if success_rate > 0.95:  # Consider successful if >95% accuracy
-            sender.metrics.successful_transmissions += 1
+            sender.metrics.successful_transmissions = 1
         
         sender.state = NodeState.READY
         
-        return {
+        # Build result dictionary
+        result = {
             'success': True,
             'sender_id': sender_id,
             'secret_bit': secret_bit,
@@ -469,12 +509,38 @@ class SecureRAQTProtocol:
             },
             'metrics': sender.metrics.to_dict()
         }
+        
+        # Sentinel-Integrated AI anomaly detection
+        if enable_ai_detection and self.ai_detector_trained:
+            execution_data = {
+                'xor_results': xor_results,
+                'basis_choices': [0, 1] * (shots // 2),
+                'error_rate': 1.0 - success_rate,
+                'execution_time': transmission_time,
+                'message_length': shots,
+                'num_parties': self.num_nodes
+            }
+            is_anomaly, score, details = self.ai_detector.detect(execution_data)
+            result['ai_anomaly'] = {
+                'detected': is_anomaly,
+                'score': score,
+                'details': {
+                    'xor_bias': details.get('xor_bias', 0),
+                    'error_rate': details.get('error_rate', 0)
+                }
+            }
+            
+            if is_anomaly:
+                print(f"[AI ALERT] Anomaly detected in transmission from node {sender_id}! Score: {score:.4f}")
+        
+        return result
     
     def get_network_status(self) -> Dict:
         """Get comprehensive network status"""
         return {
             'num_nodes': self.num_nodes,
             'security_level': self.security_level.value,
+            'ai_detector_trained': self.ai_detector_trained,
             'nodes': [node.get_status() for node in self.nodes],
             'total_transmissions': sum(n.metrics.total_transmissions for n in self.nodes),
             'total_tamper_events': sum(n.metrics.tamper_events for n in self.nodes),
@@ -485,21 +551,38 @@ class SecureRAQTProtocol:
 def demo_secure_raqt():
     """Demonstration of secure RAQT protocol"""
     print("=" * 70)
-    print("🔒 SECURE RAQT PROTOCOL DEMONSTRATION")
+    print("SECURE RAQT PROTOCOL DEMONSTRATION")
+    print("Sentinel-Integrated AI Modules Enabled")
     print("=" * 70)
-    print("\n📋 Features:")
-    print("  • PUF-based hardware authentication (SRAM + RO + Arbiter)")
-    print("  • Post-Quantum Cryptography (Dilithium + ML-KEM)")
-    print("  • AES-256-GCM encryption for classical channels")
-    print("  • Real-time tamper detection")
-    print("  • Anonymous quantum bit transmission (Christandl-Wehner 2004)")
+    print("\nFeatures:")
+    print("  * PUF-based hardware authentication (SRAM + RO + Arbiter)")
+    print("  * Post-Quantum Cryptography (Dilithium + ML-KEM)")
+    print("  * AES-256-GCM encryption for classical channels")
+    print("  * Real-time tamper detection")
+    print("  * AI-based anomaly detection for eavesdropping")
+    print("  * Anonymous quantum bit transmission (Christandl-Wehner 2004)")
     
     # Initialize secure protocol
-    print("\n🚀 Initializing secure quantum network...")
+    print("\n[INIT] Initializing secure quantum network...")
     protocol = SecureRAQTProtocol(num_nodes=4, security_level=SecurityLevel.HIGH)
     
+    # Train AI detector with baseline data
+    print("\n[AI] Training anomaly detector...")
+    normal_executions = []
+    for _ in range(50):
+        execution = {
+            'xor_results': np.random.randint(0, 2, 100).tolist(),
+            'basis_choices': np.random.randint(0, 2, 100).tolist(),
+            'error_rate': np.random.uniform(0.01, 0.05),
+            'execution_time': np.random.uniform(0.9, 1.1),
+            'message_length': 100,
+            'num_parties': 4
+        }
+        normal_executions.append(execution)
+    protocol.train_ai_detector(normal_executions)
+    
     # Run secure transmissions
-    print("\n📡 Running secure quantum transmissions...")
+    print("\n[TRANSMIT] Running secure quantum transmissions...")
     
     results = []
     for sender_id in range(4):
@@ -509,30 +592,34 @@ def demo_secure_raqt():
                 sender_id=sender_id,
                 secret_bit=secret_bit,
                 shots=500,
-                enable_tamper_check=True
+                enable_tamper_check=True,
+                enable_ai_detection=True
             )
             results.append(result)
             
             if result['success']:
-                print(f"    ✅ Success rate: {result['success_rate']*100:.1f}%")
-                print(f"    ⏱️  Transmission time: {result['transmission_time']*1000:.2f}ms")
-                print(f"    🔐 PUF reliability: {result['security']['puf_reliability']:.3f}")
+                print(f"    [OK] Success rate: {result['success_rate']*100:.1f}%")
+                print(f"    [OK] Transmission time: {result['transmission_time']*1000:.2f}ms")
+                print(f"    [OK] PUF reliability: {result['security']['puf_reliability']:.3f}")
+                if 'ai_anomaly' in result:
+                    print(f"    [AI] Anomaly score: {result['ai_anomaly']['score']:.4f}")
             else:
-                print(f"    ❌ Transmission failed: {result.get('error')}")
+                print(f"    [FAIL] Transmission failed: {result.get('error')}")
     
     # Display network status
     print("\n" + "=" * 70)
-    print("📊 NETWORK STATUS")
+    print("NETWORK STATUS")
     print("=" * 70)
     status = protocol.get_network_status()
     print(f"\n  Total nodes: {status['num_nodes']}")
     print(f"  Security level: {status['security_level']}")
+    print(f"  AI detector trained: {status['ai_detector_trained']}")
     print(f"  Total transmissions: {status['total_transmissions']}")
     print(f"  Tamper events: {status['total_tamper_events']}")
     print(f"  Average PUF reliability: {status['average_puf_reliability']:.3f}")
     
     # Display per-node metrics
-    print("\n📈 PER-NODE METRICS:")
+    print("\nPER-NODE METRICS:")
     for node_status in status['nodes']:
         print(f"\n  {node_status['node_id']}:")
         print(f"    State: {node_status['state']}")
@@ -543,7 +630,7 @@ def demo_secure_raqt():
         print(f"    Auth Time: {metrics['authentication_time_ms']:.2f}ms")
     
     print("\n" + "=" * 70)
-    print("✅ DEMONSTRATION COMPLETE")
+    print("DEMONSTRATION COMPLETE")
     print("=" * 70)
 
 
@@ -551,4 +638,4 @@ if __name__ == "__main__":
     # Run demonstration
     demo_secure_raqt()
 
-# Made with Bob
+# Made with Bob — Sentinel-Integrated AI Modules

@@ -14,7 +14,10 @@ Test Coverage:
     - Report generation
     - Edge cases and error handling
 """
-
+import sys
+import os
+#  look one directory up for the 'src' folder
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pytest
 import numpy as np
 import tempfile
